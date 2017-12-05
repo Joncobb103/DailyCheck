@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html>
-<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/dailycheck.css') }}" >
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/dailycheck.css') }}" />
 <link rel="shortcut icon" href="{{ url_for('static', filename = 'images/fig-logo.jpg') }}" />
 	<head>
 	<title>Jonathan's daily Check</title>
@@ -17,6 +17,7 @@
 		<a href = "{{ url_for('dailyCheck',state = state) }}">{{ state }}</a>
 		{% endfor %}
 		</div></li>
+    <li style="float:left;" class="drop"><a href = "{{ url_for('logout') }}">Log out</a></li>
 	<li><form method="post" action="/searchdep" class="searchid">
 	<table><tr><th>Search Deposit</th></tr>
 	<tr><td><input type="search" name ="depid" placeholder="Enter deposit id...."></td>
@@ -90,7 +91,14 @@
 	</tbody>
 	</table>
 	{% endif %}
-	<br><br><br>
+	<br><br>
+	    {% if 'CO' in thestate  %}
+	    <h3 class="head">Drop Denver csv:</h3>
+	    <form method="post" action="/denverdep" enctype = "multipart/form-data">
+	    <input type="file" name="filepath"><br><input type="submit" value="Process Denver pids">
+	    </form>
+	    {% endif %}
+	<br>
 	<div class="today">
 	{% if datecheck %}
 	<h2 class="head">To Do List</h2>
@@ -128,7 +136,13 @@
 				<td><a href="{{ todolist.get('record_id_path')[row] }}" target="_blank">{{ todolist.get(key)[row] }}</a></td>
 			{% elif key == 'record_id_path' %}
 			{% elif key == 'syscountyname' %}
-			{% elif key == 'Deposit amount - invoiced amount' %}
+            {% elif key == 'Deposit amount - invoiced amount' %}
+            {% elif key == 'ocr_text' and todolist.get('ocr_text')[row] == 'No' %}
+                <td><strong><font color="red">{{ todolist.get(key)[row] }}</font><strong></td>  
+            {% elif key == 'document' and todolist.get('document')[row] == 'No' %}
+                <td><strong><font color="red">{{ todolist.get(key)[row] }}</font><strong></td>  
+            {% elif key == 'pid_status' and todolist.get('pid_status')[row] == 'has_pids' %}
+                <td><strong><font color="green">{{ todolist.get(key)[row] }}</font><strong></td>  
 			{% elif key == 'count_parcels_in_deposit' %}
 			{% if todolist.get(key)[row] == '0' %}
 			<td>Not redeemed yet</td>

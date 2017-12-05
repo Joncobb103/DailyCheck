@@ -1,10 +1,10 @@
 <com.fig.classes.CountyTxtFiles>
   <a>
     <entry>
-      <string>santarosa</string>
+      <string>polk</string>
       <java.util.Arrays_-ArrayList>
         <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/santarosanew_XML.xml</string>
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/polknew_XML.xml</string>
         </a>
       </java.util.Arrays_-ArrayList>
     </entry>
@@ -12,31 +12,15 @@
       <string>paterson (passaic, nj)</string>
       <java.util.Arrays_-ArrayList>
         <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/paterson (passaic, nj)new_XML.xml</string>
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/paterson (passaic, nj)new_XML.xml</string>
         </a>
       </java.util.Arrays_-ArrayList>
     </entry>
     <entry>
-      <string>escambia</string>
+      <string>weld</string>
       <java.util.Arrays_-ArrayList>
         <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/escambianew_XML.xml</string>
-        </a>
-      </java.util.Arrays_-ArrayList>
-    </entry>
-    <entry>
-      <string>douglas</string>
-      <java.util.Arrays_-ArrayList>
-        <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/douglasnew_XML.xml</string>
-        </a>
-      </java.util.Arrays_-ArrayList>
-    </entry>
-    <entry>
-      <string>levy</string>
-      <java.util.Arrays_-ArrayList>
-        <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/levynew_XML.xml</string>
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/weldnew_XML.xml</string>
         </a>
       </java.util.Arrays_-ArrayList>
     </entry>
@@ -44,7 +28,55 @@
       <string>park</string>
       <java.util.Arrays_-ArrayList>
         <a class="string-array">
-          <string>~/qbpython/DailyCheck/src/CountyClassOneOff/parknew_XML.xml</string>
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/parknew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>douglas</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/douglasnew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>escambia</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/escambianew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>denver</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/denvernew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>bankruptcy</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/bankruptcynew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>santarosa</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/santarosanew_XML.xml</string>
+        </a>
+      </java.util.Arrays_-ArrayList>
+    </entry>
+    <entry>
+      <string>levy</string>
+      <java.util.Arrays_-ArrayList>
+        <a class="string-array">
+          <string>/root/qbpython/DailyCheck/src/CountyClassOneOff/levynew_XML.xml</string>
         </a>
       </java.util.Arrays_-ArrayList>
     </entry>

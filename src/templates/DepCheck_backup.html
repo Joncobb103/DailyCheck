@@ -17,6 +17,7 @@
 		<a href = "{{ url_for('dailyCheck',state = state) }}">{{ state }}</a>
 		{% endfor %}
 		</div></li>
+    <li style="float:left;" class="drop"><a href = "{{ url_for('logout') }}">Log out</a></li>
 	<li><form method="post" action="/searchdep" class="searchid">
 	<table><tr><th>Search Deposit</th></tr>
 	<tr><td><input type="search" name ="depid" placeholder="Enter deposit id...."></td>

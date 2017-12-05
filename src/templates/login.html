@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/login.css') }}" />
+<link rel="shortcut icon" href="{{ url_for('static', filename = 'images/fig-logo.jpg') }}" />
+<head>
+	<title>Jonathan's Daily Redemptions</title>
+</head>
+<body>
+    <ul class="header1">
+        <li style="float:left;">
+    <img src="{{ url_for('static', filename = 'images/FinchIcon_Reversed_Red.jpg') }}"></li>
+    <li style="float:left;"><h1>Daily Redemptions</h1></li>
+    </ul><br><br><br>
+<form action='/login' method="post" class="loginform">
+<h1>Login</h1>
+{%if user_email is not none %}
+    <input type="email" name="email" placeholder="Enter email address.." value="{{ user_email }}">
+{% else %}
+    <input type="email" name="email" placeholder="Enter email address..">
+{% endif %}<br><br>
+    <input type="password" name="password" placeholder="Enter password.."><br><br>
+    <font style="float:left;">Remember me </font><input type="checkbox" name="remember" style="float:left;">
+    <input type="submit">
+</form>
+<img src="{{ url_for('static', filename = 'images/redbird.jpg') }}" class="figimg">
+{% if error is not none %}
+<p style="color:red">{{ error }}</p>
+{% endif %}
+</body>
+</html>

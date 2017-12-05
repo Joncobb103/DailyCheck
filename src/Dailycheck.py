@@ -4,7 +4,7 @@ Created on Mar 24, 2017
 @author: Jonathan.Cobb
 '''
 import os
-from flask import Flask, render_template, request, redirect,make_response
+from flask import Flask, render_template, request, redirect,make_response,session
 from datetime import datetime,timedelta
 from Sql import Sql
 import pandas as pd
@@ -15,11 +15,11 @@ from autoRedeem import CreatePids, CreateDocv
 import qbapi.qbapi as qb
 import quickbase_auto_redeem as ar
 from regexConverter import RegexConverter as rgc
+from werkzeug import secure_filename
 
-app = Flask(__name__)
-#mydir = os.path.dirname(__file__)
+app = Flask(__name__,template_folder='templates')
 mydir = os.getcwd()
-print mydir
+app.secret_key = Utils().readFile(mydir, 'secret_key.txt')
 
 dccontent = None
 diffcontent = None
@@ -29,6 +29,7 @@ todocontent = None
 deppidcont = None 
 depbackupcont = None
 ar_fl = None
+nostate='no state'
 ar_all = None
 ar_co = None
 ar_az = None
@@ -65,6 +66,7 @@ def createDictFromArgs():
     password = argMap.get("password")
     db = argMap.get("db")
     states = argMap.get("states")
+    myport = argMap.get("port")
     global stateslist
     if ',' in states:
         stateslist = states.split(',')
@@ -75,7 +77,7 @@ def createDictFromArgs():
         state += "'"+str(astate)+"'"+","
     state = state[:-1]
     
-    argDict = {'url':url,'uid':uid,'pass':password,'db':db,'dir':mydir,
+    argDict = {'url':url,'uid':uid,'pass':password,'db':db,'dir':mydir,"port":myport,
                 'state' : state, 'stateslist' : stateslist}
     return argDict
 
@@ -144,6 +146,12 @@ def createDfFromSql2(query,url,uid,password,db):
     col = sql.colNames(query)
     row = pd.DataFrame(row, columns=col)
     return row.to_dict()
+
+def restart():
+    pidid = os.getpid()
+    command  = os.path.join(mydir,'batchfiles/restart'+bat_or_sh)+" "+str(pidid)
+    os.system(command)
+    #os.system(command)
 
 def createDfFromSql1(query,url,uid,password,db):
     row = sql.find(query)
@@ -248,13 +256,49 @@ def setVars():
     global abbyy
     abbyy = util.readFile(mydir,'batchfiles/abbyy.txt')
 
-
 @app.route('/')
+@app.route('/log_on')
+def log_on():
+    if len(session) > 0 and 'logged in user' in session:
+        return redirect(url_for('dailyCheck'))
+    user_email = request.cookies.get('user_email')
+    return render_template('login.html', error=None, user_email=user_email)
+
+@app.route('/login',  methods=['GET','POST'])
+def login():
+    user_email = str(request.form['email'])
+    passwrd = str(request.form['password'])
+    checking = "select * from developer.red_login where email ='"+user_email+"'" 
+    login_info = createDfFromSql1(checking, url, uid, password, db)
+    if len(login_info) == 0:
+        error = "Email isn't registered"
+        user_email = request.cookies.get('user_email')
+        return render_template('login.html',error=error, user_email=user_email)
+    if login_info.password[0] == passwrd:
+        session['logged in user'] = user_email
+    else:
+        error = 'password is incorrect'
+        user_email = request.cookies.get('user_email')
+        return render_template('login.html', error=error, user_email=user_email)
+    if 'remember' in request.form:
+        resp = make_response(redirect(url_for('dailyCheck',state=None)))
+        resp.set_cookie('user_email', user_email)
+        return resp
+    return redirect(url_for('dailyCheck',state=None ))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('log_on'))
+
+@app.route('/dailyCheck')
 @app.route("/dailyCheck/<state>")
 def dailyCheck(state=None):
-    qbstate = state
-    if state is None:
+    if len(session) <= 0 or 'logged in user' not in session:
+        return redirect(url_for('log_on'))
+    if state is None or state.lower() == nostate:
         state = args.get('state')
+        qbstate = None
     else:
         state = "'"+state+"'"
         qbstate =state
@@ -326,8 +370,12 @@ def dailyCheck(state=None):
     if len(qbdf) > 0:
         qbdf['record_id_path'] = qbdf['record_id'].apply(lambda x: qbpath+x)
         unapplied_list = str(qbdf.old_fig_deposits_record_id.tolist()).replace("'","").replace('"',"").replace("[","").replace("]","")
+        unapplied_list = unapplied_list.replace('nan,',"").replace("nan","")
         todo1 = todo.replace(";", " and id in ("+unapplied_list+");")
         todolist = createDfFromSql1(todo1,url,uid,password,db)
+        nanlist = qbdf.index[qbdf['old_fig_deposits_record_id'].isnull()].tolist()
+        for i in nanlist:
+            qbdf = qbdf.drop(i)
         qbdf.old_fig_deposits_record_id = qbdf.old_fig_deposits_record_id.astype(int)
         todolist.id = todolist.id.astype(int)
         todolist = pd.merge(todolist,qbdf, how='left', left_on= 'id',right_on='old_fig_deposits_record_id')
@@ -342,6 +390,7 @@ def dailyCheck(state=None):
     global check
     global abbyy
     abbyytemp = replaceDateAndState(abbyy, state)
+
     #render html
     return render_template('DailyCheck2.html',results = rows, thestate = state,issues=issues
                            ,datecheck=check,todolist = todolist, contact = None,abbyy=abbyytemp,redsite=None,
@@ -352,6 +401,8 @@ def dailyCheck(state=None):
 ##Flask Routes##
 @app.route("/dailyCheckCounty/<county>")
 def dailyCheckCounty(county=None):
+    if len(session) <= 0 or 'logged in user' not in session:
+        return redirect(url_for('log_on'))
     state = args.get('state')
     stateslist = args.get('stateslist')
      
@@ -415,8 +466,12 @@ def dailyCheckCounty(county=None):
     if len(qbdf) > 0:
         qbdf['record_id_path'] = qbdf['record_id'].apply(lambda x: qbpath+x)
         unapplied_list = str(qbdf.old_fig_deposits_record_id.tolist()).replace("'","").replace('"',"").replace("[","").replace("]","")
+        unapplied_list = unapplied_list.replace('nan,',"").replace("nan","")
         todo1 = todo.replace(";", " and id in ("+unapplied_list+");")
         todolist = createDfFromSql1(todo1,url,uid,password,db)
+        nanlist = qbdf.index[qbdf['old_fig_deposits_record_id'].isnull()].tolist()
+        for i in nanlist:
+            qbdf = qbdf.drop(qbdf.index[i])
         qbdf.old_fig_deposits_record_id = qbdf.old_fig_deposits_record_id.astype(int)
         todolist.id = todolist.id.astype(int)
         todolist = pd.merge(todolist,qbdf, how='left', left_on= 'id',right_on='old_fig_deposits_record_id')
@@ -461,6 +516,8 @@ def searchdep():
     
 @app.route('/depView/<depid>/')
 def depView(depid):
+    if len(session) <= 0 or 'logged in user' not in session:
+        return redirect(url_for('log_on'))
     # Get args from run config
     state = args.get('state')
     stateslist = args.get('stateslist')
@@ -585,6 +642,8 @@ def depView(depid):
 
 @app.route('/depBackup/<depid>/')
 def depBackup(depid):
+    if len(session) <= 0 or 'logged in user' not in session:
+        return redirect(url_for('log_on'))
     # Get args from run config
     state = args.get('state')
     stateslist = args.get('stateslist')
@@ -728,18 +787,28 @@ def njCalc(depid):
             qbquery += '{331.EX."'+pid.get('active_lien_number')[row]+'"}OR'
     qbquery = qbquery[:-2] + ')'
     calcs = qb.query_table(token, tid, qbquery, fields)
-    calcs['active_lien_number'] = calcs['maximum_record_id____active_lien_number']
-    if 'nj_calculation_premium_amount' not in calcs.columns:
-        calcs['nj_calculation_premium_amount'] = 'no input'
-    calcs = calcs[[    
-    'record_id',
-    'active_lien_number',   
-    'block_lot_qual',     
-    'nj_calculation_premium_amount',    
-    'nj_calculation_non_premium_amount',    
-    'nj_calculation_input_total',
-    'nj_calculation_result']]
-    calcs = calcs.to_html(classes='',index=False,border=0,na_rep='')
+    if len(calcs) > 0:
+        if 'maximum_record_id____active_lien_number' in calcs.columns: 
+            calcs['active_lien_number'] = calcs['maximum_record_id____active_lien_number']
+        if 'nj_calculation_premium_amount' not in calcs.columns:
+            calcs['nj_calculation_premium_amount'] = 'no input'
+        if 'nj_calculation_non_premium_amount' not in calcs.columns:
+            calcs['nj_calculation_non_premium_amount'] = 'no input'
+        if 'nj_calculation_result' not in calcs.columns:
+            calcs['nj_calculation_result'] = 'no input'
+        if 'nj_calculation_input_total' not in calcs.columns:
+            calcs['nj_calculation_input_total'] = 'no input'
+        calcs = calcs[[    
+        'record_id',
+        'active_lien_number',   
+        'block_lot_qual',     
+        'nj_calculation_premium_amount',    
+        'nj_calculation_non_premium_amount',    
+        'nj_calculation_input_total',
+        'nj_calculation_result']]
+        calcs = calcs.to_html(classes='',index=False,border=0,na_rep='')
+    else:
+        calcs = None
     return render_template('njCalc.html', pid=pid,calcs=calcs, depid=depid, disfn=dfn)
 
 @app.route("/ccCreator", methods=["GET","POST"])
@@ -887,7 +956,7 @@ def addPid():
 @app.route('/runAbbyy', methods =['GET','POST'])
 def runAbbyy():
     ablink = request.form['ablink']
-    os.system('start chrome "'+ablink+'"')
+    os.system('google-chrome "'+ablink+'"')
     return redirect(url_for('dailyCheck' ))
 
 @app.route('/runAbbyy_sp', methods =['GET','POST'])
@@ -895,7 +964,7 @@ def runAbbyy_sp():
     state = str(request.form['state'])
     ablink = abbyy.replace('(REPLACE DATE)', date_str)
     ablink = ablink.replace('(REPLACE STATE)',state)
-    os.system('start chrome "'+ablink+'"')
+    os.system('google-chrome "'+ablink+'"')
     return redirect(url_for('dailyCheck' ))
 
 
@@ -964,12 +1033,12 @@ def CreateOcrfromfile():
         
     #initialize temp files
     try:
-        pdftemp = os.path.join(mydir,depfile.filename)
+        pdftemp = os.path.join(os.path.join(mydir,'temptxt'),depfile.filename.replace(' ','').replace('(','').replace(')','').lower())
+        depfile.save(pdftemp)
     except:
         return redirect(url_for('depView',depid = d_id ))
-    depfile.save(pdftemp)
     if ".pdf" not in pdftemp:
-        ocr_text = util.readFile(mydir, depfile.filename)
+        ocr_text = util.readFile(os.path.join(mydir,'temptxt'), depfile.filename.replace(' ','').replace('(','').replace(')','').lower())
         table = 'developer.ocr_text_local'
         checking = 'select * from '+table+' where deposit_id = '+d_id
         try:
@@ -995,7 +1064,10 @@ def CreateOcrfromfile():
         util.rotatePdf(pdftemp, 90, 'temptxt')
     elif 'counterclock' in request.form:
         util.rotatePdf(pdftemp, -90, 'temptxt')
-    docvc.InsertOcr(url, uid, password, db, pdftemp, d_id)
+    if bat_or_sh == ".sh":
+        docvc.InsertAbbyOcr(url, uid, password, db, pdftemp, d_id)
+    else:
+        docvc.InsertOcr(url, uid, password, db, pdftemp, d_id)
     #update qb
     field = "22"
     token ='cxeyvydbvik5y3523fepbiue8q2'
@@ -1034,20 +1106,23 @@ def CreateOcr():
         util.rotatePdf(pdftemp, 90, 'temptxt')
     elif 'counterclock' in request.form:
         util.rotatePdf(pdftemp, -90, 'temptxt')
-    docvc.InsertOcr(url, uid, password, db, pdftemp, d_id)
+    if bat_or_sh == ".sh":
+        docvc.InsertAbbyOcr(url, uid, password, db, pdftemp, d_id)
+    else:
+        docvc.InsertOcr(url, uid, password, db, pdftemp, d_id)
     os.remove(pdftemp)
     return redirect(url_for('depView',depid = d_id ))
 
 
 @app.route('/createPid', methods=['POST'])
 def createPid():
-    countytxtpath = os.path.join(mydir,'countytxtfolder\CountyTxtFiles.xml')
-    countytxtpath2 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles2.xml')
-    countytxtpath3 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles3.xml')
-    countytxtpath_nj = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ.xml')
-    countytxtpath_nj2 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ2.xml')
-    countytxtpath_nj3 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ3.xml')
-    countytxtpath1offs = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_1_offs.xml')
+    countytxtpath = os.path.join(mydir,'countytxtfolder/CountyTxtFiles.xml')
+    countytxtpath2 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles2.xml')
+    countytxtpath3 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles3.xml')
+    countytxtpath_nj = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj.xml')
+    countytxtpath_nj2 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj2.xml')
+    countytxtpath_nj3 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj3.xml')
+    countytxtpath1offs = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_1_offs.xml')
     njccid = "district_full_name"
     ccid = "syscountyname"
     state = str(request.form['state'])
@@ -1101,13 +1176,13 @@ def CreatePidSp():
         ccid = "district_full_name"
     else:
         ccid = "syscountyname"
-    countytxtpath = os.path.join(mydir,'countytxtfolder\CountyTxtFiles.xml')
-    countytxtpath2 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles2.xml')
-    countytxtpath3 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles3.xml')
-    countytxtpath_nj = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ.xml')
-    countytxtpath_nj2 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ2.xml')
-    countytxtpath_nj3 = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_NJ3.xml')
-    countytxtpath1offs = os.path.join(mydir,'countytxtfolder\CountyTxtFiles_1_offs.xml')
+    countytxtpath = os.path.join(mydir,'countytxtfolder/CountyTxtFiles.xml')
+    countytxtpath2 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles2.xml')
+    countytxtpath3 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles3.xml')
+    countytxtpath_nj = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj.xml')
+    countytxtpath_nj2 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj2.xml')
+    countytxtpath_nj3 = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_Nj3.xml')
+    countytxtpath1offs = os.path.join(mydir,'countytxtfolder/CountyTxtFiles_1_offs.xml')
     ar_idsp1 = ar_idsp.replace('(REPLACE ID)', dep_id)
     if state == 'NJ':
         if 'backup' in request.form:
@@ -1115,6 +1190,8 @@ def CreatePidSp():
         elif 'dub' in request.form:
             cp.CreatePids( url, uid, password, db, ar_idsp1, ccid, countytxtpath_nj)
             cp.CreatePidsOverride( url, uid, password, db, ar_idsp1, ccid, countytxtpath_nj3)
+        elif 'oneoffs' in request.form:
+            cp.CreatePids( url, uid, password, db, ar_idsp1, ccid,countytxtpath1offs)
         else:
             cp.CreatePids( url, uid, password, db, ar_idsp1, ccid, countytxtpath_nj)
         return redirect(url_for('depView',depid = dep_id ))
@@ -1150,13 +1227,6 @@ def createDocv():
 def other():
     return render_template('other.html')
 
-@app.route('/gacsv', methods=['POST'])
-def gacsv():
-    batchf = os.path.join(mydir,'batchfiles/parsefromfolder'+bat_or_sh)
-    os.system(batchf)
-    return render_template('other.html')
-
-
 @app.route('/DeleteAPid/<depid>', methods=['POST'])
 def DeleteAPid(depid):
     table = 'developer.parcels_in_deposits2'
@@ -1180,32 +1250,64 @@ def updatePid():
     col =[]
     values=[] 
     if 'parcel' in request.form.keys():
-        if request.form["lien"] is not None and request.form["lien"] is not '' and request.form["lien"] != 'None':
+        if request.form["lien"] is not None and request.form["lien"] != '' and request.form["lien"] != 'None':
             values.append("'"+request.form["lien"]+"'") 
             col.append('active_lien_number')
-        if request.form["parcel"] is not None and request.form["parcel"] is not '' and request.form["parcel"] != 'None':
+        else:
+            values.append('None')
+            col.append('active_lien_number')
+        if request.form["parcel"] is not None and request.form["parcel"] != '' and request.form["parcel"] != 'None':
             values.append("'"+request.form["parcel"]+"'") 
             col.append('active_parcel')
-        if request.form["taxyear"] is not None and request.form["taxyear"] is not '' and request.form["taxyear"] != 'None':
+        else:
+            values.append('None')
+            col.append('active_parcel')
+        if request.form["taxyear"] is not None and request.form["taxyear"] != '' and request.form["taxyear"] != 'None':
             values.append(request.form["taxyear"])
             col.append('tax_year')
-        if request.form["lienyear"] is not None and request.form["lienyear"] is not '' and request.form["lienyear"] != 'None':
+        else:
+            values.append('None')
+            col.append('tax_year')
+        if request.form["lienyear"] is not None and request.form["lienyear"] !=  '' and request.form["lienyear"] != 'None':
             values.append(request.form["lienyear"])
             col.append('lien_year') 
-    if 'qual' in request.form.keys():
-        if request.form["qual"] is not None and request.form["qual"] is not '' and request.form["qual"] != 'None':
+        else:
+            values.append('None')
+            col.append('lien_year')
+    if 'block' in request.form.keys():
+        if request.form["lien"] is not None and request.form["lien"] != '' and request.form["lien"] != 'None':
+            values.append("'"+request.form["lien"]+"'") 
+            col.append('active_lien_number')
+        else:
+            values.append('None')
+            col.append('active_lien_number')
+        if request.form["qual"] is not None and request.form["qual"] != '' and request.form["qual"] != 'None':
             values.append("'"+request.form["qual"]+"'") 
             col.append('qual')
-        if request.form["lot"] is not None and request.form["lot"] is not '' and request.form["lot"] != 'None':
+        else:
+            values.append('None')
+            col.append('qual')
+        if request.form["lot"] is not None and request.form["lot"] != '' and request.form["lot"] != 'None':
             values.append("'"+request.form["lot"]+"'") 
             col.append('lot')
-        if request.form["block"] is not None and request.form["block"] is not '' and request.form["block"] != 'None':
+        else:
+            values.append('None')
+            col.append('lot')
+        if request.form["block"] is not None and request.form["block"] != '' and request.form["block"] != 'None':
             values.append(request.form["block"])
             col.append('block')
-    total_per_parcel = str(request.form["total"])
-    if ',' in total_per_parcel:
-        total_per_parcel = total_per_parcel.replace(',','')
-    values.append(total_per_parcel)
+        else:
+            values.append('None')
+            col.append('block')
+    if request.form["total"] is not None and request.form["total"] != '' and request.form["total"] != 'None':        
+        total_per_parcel = str(request.form["total"])
+        if ',' in total_per_parcel:
+            total_per_parcel = total_per_parcel.replace(',','')
+        if '$' in total_per_parcel:
+            total_per_parcel = total_per_parcel.replace('$','')
+        values.append(total_per_parcel)
+    else:
+        values.append('None')
     col.append('total_per_parcel')
     
     #insert to db
@@ -1248,11 +1350,67 @@ def autoRedeem():
     except Exception,e:
         print e
     return redirect(url_for('dailyCheck',state = None))
- 
+
+@app.route('/denverdep',methods=['GET','POST'])
+def denverdep():
+    #get denver file
+    filepath = request.files["filepath"]
+    filepath.save(secure_filename(filepath.filename))
+    denver_file = pd.DataFrame.from_csv(filepath.filename)
+    os.remove(filepath.filename)
+    list_size = len(denver_file)
+    list_index = [x for x in range(list_size)]
+    denver_file['Parcel'] = denver_file.index
+    denver_file = denver_file.set_index([list_index])
+    denver_file_dict = denver_file.to_dict()
+    
+    parcel_map = dict()
+    for i in range(list_size):
+        parcel_num = denver_file_dict.get('Parcel')[i]
+        if parcel_num in parcel_map.keys():
+            parcel_map.get(parcel_num).append(i)
+        else:
+            parcel_map[parcel_num] = [i]
+        
+    #find deposit match
+    fields = "3.8.12"
+    token ='cxeyvydbvik5y3523fepbiue8q2'
+    tid = 'bk2reib52'
+    for key in parcel_map.keys():
+        if key != 'nan':
+            qstringofrqb =""
+            for i in parcel_map.get(key):
+                qstringofrqb+="({12.EX.'"+denver_file_dict.get('Transaction Amount')[i]+"'}"+\
+                "AND{13.GTE.'"+denver_file_dict.get('Payment Date')[i].replace('/','-')+"'}"+\
+                "AND{26.EX.'Denver'}AND{43.EX.'Unapplied'})OR"
+            qstringofrqb = qstringofrqb[:-2]
+            columnchange = 'Old FIG Deposits Record ID'
+            columnchange = columnchange.replace(" ","_").lower()
+            try:
+                dep_rec_id = qb.query_table(token,tid,qstringofrqb,fields).sort('deposit_amount',ascending=False)[columnchange]
+                for ofrid in dep_rec_id:
+                    values = [ofrid,None,"'"+key+"'",None,None,None,None,None,None]
+                    sql.insert("developer.parcels_in_deposits2", values)
+                    ar_sp_query = util.readFile(mydir,'batchfiles/autoRedeem/autoRedeem.sql').replace('OLDFIGLIST',ofrid)
+                    util.writeFile(mydir, 'batchfiles/autoRedeem/temp.sql', ar_sp_query)
+                    argm = util.readFile(mydir,'batchfiles/autoRedeem/autoRedeem.txt').replace('%1','CO')
+                    argm = argm.replace('autoRedeem.sql','temp.sql')
+                    argl = str(argm).split(' ')
+                    try:
+                        ar.main(argl)
+                    except Exception,e:
+                        print e
+            except:
+                pass   
+    
+    return redirect(url_for('dailyCheck',state = None))     
     
 
 @app.route('/reports')  
+@app.route('/reports/<state>')  
 def reports(state=None):
+    if len(session) <= 0 or 'logged in user' not in session:
+        return redirect(url_for('log_on'))
     f_o_m = date_str
 #     f_o_m = '2017-07-14'
     payment_high_int_message = ""
@@ -1338,7 +1496,7 @@ def reports(state=None):
     fields = "34.12.32.35"
     token ='cxeyvydbvik5y3523fepbiue8q2'
     tid = 'bk2reib52'
-    qstringofrqb="{13.EX.'"+f_o_m+"'}"
+    qstringofrqb="{13.GTE.'"+f_o_m+"'}"
     if state is not None:
         qstringofrqb+="AND{32.EX.'"+state+"'}"
     deposit_vs_payments = pd.DataFrame(qb.query_table(token,tid,qstringofrqb,fields))
@@ -1379,132 +1537,6 @@ def reports(state=None):
 
 
 
-@app.route('/reports_for_state/<state>')  
-def reports_for_state(state=None):
-    f_o_m = date_str
-    payment_high_int_message = ""
-    #Payments table
-    fields = "34.3.8.55.23.26.29.38.57.58.70.10.11.12.17.138.174.135"
-    token ='cxeyvydbvik5y3523fepbiue8q2'
-    tid = 'bk2rg4v85'
-    qstringofrqb="{174.GTE.'.30'}AND{19.GTE.'"+f_o_m+"'}AND{140.XCT.'Yes'}"
-    if state is not None:
-        qstringofrqb+="AND{35.EX.'"+state+"'}"
-    payment_high_int = qb.query_table(token,tid,qstringofrqb,fields)
-    if len(payment_high_int) > 0:
-        payment_high_int['invoice_interest'] = payment_high_int['invoice_interest'].astype(float)
-        payment_high_int['invoice_purchase_amount'] = payment_high_int['invoice_purchase_amount'].astype(float)
-        del payment_high_int['update_id']
-        payment_high_int['record_id'] = payment_high_int['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in payment_high_int.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            payment_high_int.rename(columns={col : col_new}, inplace=True)
-            
-             
-    qstringofrqb="{17.LT.'_FID_29'}AND{17.GT.'0'}AND{70.GT.'0'}AND{19.GTE.'"+f_o_m+"'}AND{136.XCT.'Partial payment correctly applied'}"
-    if state is not None:
-        qstringofrqb+="AND{35.EX.'"+state+"'}"
-    fields = "34.3.8.55.23.26.29.38.57.58.70.10.11.12.17.138.135"
-    payment_partial = qb.query_table(token,tid,qstringofrqb,fields)
-    if len(payment_partial) > 0:
-        payment_partial['record_id'] = payment_partial['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in payment_partial.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            payment_partial.rename(columns={col : col_new}, inplace=True) 
-        
-        
-        
-    qstringofrqb="{70.XEX.'0'}AND{19.GTE.'"+f_o_m+"'}"
-    if state is not None:
-        qstringofrqb+="AND{35.EX.'"+state+"'}"
-    payment_error_upf = qb.query_table(token,tid,qstringofrqb,fields)
-    if len(payment_error_upf) > 0:
-        payment_error_upf['record_id'] = payment_error_upf['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in payment_error_upf.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            payment_error_upf.rename(columns={col : col_new}, inplace=True) 
-    
-    #payment_redemption_review    
-    qstringofrqb="{140.EX.''}AND{19.GTE.'"+f_o_m+"'}AND({70.GT.'0'}OR{138.GT.'0'}OR{70.LT.'0'}OR{138.LT.'0'})"
-    if state is not None:
-        qstringofrqb+="AND{35.EX.'"+state+"'}"
-    payment_redemption_review = qb.query_table(token,tid,qstringofrqb,fields)
-    if len(payment_redemption_review) > 0:
-        payment_redemption_review['record_id'] = payment_redemption_review['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in payment_redemption_review.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            payment_redemption_review.rename(columns={col : col_new}, inplace=True)    
-    
-        #payment_negative invoiced    
-    qstringofrqb="({11.LT.0}OR{10.LT.0})AND{19.GTE.'"+f_o_m+"'}"
-    if state is not None:
-        qstringofrqb+="AND{35.EX.'"+state+"'}"
-    payment_neg_inv = qb.query_table(token,tid,qstringofrqb,fields)
-    if len(payment_neg_inv) > 0:
-        payment_neg_inv['record_id'] = payment_neg_inv['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in payment_neg_inv.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            payment_neg_inv.rename(columns={col : col_new}, inplace=True)     
-        
-    payment_high_int = payment_high_int.to_dict()
-    payment_partial = payment_partial.to_dict()
-    payment_error_upf = payment_error_upf.to_dict()
-    payment_redemption_review = payment_redemption_review.to_dict()
-    payment_neg_inv = payment_neg_inv.to_dict()
-     
-    fields = "34.12.32.35"
-    token ='cxeyvydbvik5y3523fepbiue8q2'
-    tid = 'bk2reib52'
-    qstringofrqb="{13.EX.'"+date_str+"'}"
-    if state is not None:
-        qstringofrqb+="AND{32.EX.'"+state+"'}"
-    deposit_vs_payments = pd.DataFrame(qb.query_table(token,tid,qstringofrqb,fields))
-    deposit_vs_payments['deposit_amount'] = deposit_vs_payments['deposit_amount'].astype(float)
-    deposit_vs_payments['total_invoice'] = deposit_vs_payments['total_invoice'].astype(float)
-    if 'deposit_check_to_total_invoice' in deposit_vs_payments.columns:
-        deposit_vs_payments['deposit_check_to_total_invoice'] = deposit_vs_payments['deposit_check_to_total_invoice'].astype(float)
-    else:
-        deposit_vs_payments['deposit_check_to_total_invoice'] = 0.0
-    deposit_vs_payments['diff'] = deposit_vs_payments['deposit_check_to_total_invoice']
-    del deposit_vs_payments['deposit_check_to_total_invoice']
-    deposit_vs_payments=deposit_vs_payments.groupby(by=['district_id___state']).sum().to_html(classes='',index=True,border=0,na_rep='').replace('_',' ').replace('dataframe','dvp')
-    
-    fields = "24.3.12.34.8"
-    token ='cxeyvydbvik5y3523fepbiue8q2'
-    tid = 'bk2reib52'
-    qstringofrqb="{13.EX.'"+date_str+"'}AND{34.GT.'0'}AND{12.XEX._FID_34}"
-    if state is not None:
-        qstringofrqb+="AND{32.EX.'"+state+"'}"
-    dep_over_under = pd.DataFrame(qb.query_table(token,tid,qstringofrqb,fields))
-    if len(dep_over_under) > 0:
-        dep_over_under['record_id'] = dep_over_under['deposits_record_id'].apply(lambda x: qbpath+x)
-        for col in dep_over_under.columns:
-            if str(col) == 'record_id':
-                continue
-            col_new = col.replace('liens_record_id__','').replace('_',' ')
-            dep_over_under.rename(columns={col : col_new}, inplace=True)     
-    dep_over_under = dep_over_under.to_dict()
-    
-    qstringofrqb="{13.EX.'"+date_str+"'}"
-    try:
-        states_for_today = pd.DataFrame(qb.query_table(token,tid,qstringofrqb,fields))['district_id___state'].unique().tolist()
-    except:
-        states_for_today = []
-    return render_template('reports.html', payment_high_int = payment_high_int,payment_partial = payment_partial,dep_over_under=dep_over_under,
-                           payment_high_int_message=payment_high_int_message, payment_error_upf = payment_error_upf, payment_neg_inv=payment_neg_inv,
-                           payment_redemption_review=payment_redemption_review,deposit_vs_payments=deposit_vs_payments,states_for_today=states_for_today)
-
-
 
 if __name__=="__main__":
     sys_type = sys.platform
@@ -1526,4 +1558,9 @@ if __name__=="__main__":
     setVars()
     sys.argv = ['username=bperlman@figadvisors.com','password=figtree77*']
     qb.authenticate_from_args()
-    app.run(debug=False,host="104.236.167.205")
+#     app.run(debug=False,host="104.236.167.205",port=int("80"),ssl_context=('/root/cert.pem','/root/key.pem'))
+    myport = args.get("port")
+    if myport is None:
+        app.run(debug=False,host="104.236.167.205")
+    else:
+        app.run(debug=False,host="104.236.167.205",port=myport)  

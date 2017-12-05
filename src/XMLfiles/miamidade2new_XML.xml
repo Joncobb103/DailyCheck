@@ -6,7 +6,7 @@
         <entry>
       <string>validLine</string>
       <list>
-        <string>[^0-9A-Za-z]+20[123][0-9][^0-9A-Za-z]+[0-9]{3,}[^0-9A-Za-z]+</string>
+        <string>[^0-9A-Za-z]+20[123][0-9][^0-9A-Za-z]+[0-9]{1,}[^0-9A-Za-z]+</string>
       </list>
     </entry>
     <entry>

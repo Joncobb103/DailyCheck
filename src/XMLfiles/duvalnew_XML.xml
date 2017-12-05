@@ -65,6 +65,14 @@
         <string> 0 00 </string>
         <string></string>
       </string-array>
+          <string-array>
+            <string>Ocl</string>
+            <string>Oct</string>
+          </string-array>
+          <string-array>
+            <string>ocl</string>
+            <string>oct</string>
+          </string-array>
   </charReplacer>
   <regexMap>
         <entry>

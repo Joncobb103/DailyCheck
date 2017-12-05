@@ -18,6 +18,7 @@
 		<a href = "{{ url_for('dailyCheck',state = state) }}">{{ state }}</a>
 		{% endfor %}
 		</div></li>
+    <li style="float:left;" class="drop"><a href = "{{ url_for('logout') }}">Log out</a></li>
 	<li><form method="post" action="/searchdep" class="searchid">
 	<table><tr><th>Search Deposit</th></tr>
 	<tr><td><input type="search" name ="depid" placeholder="Enter deposit id...."></td>
@@ -32,7 +33,7 @@
 	</li>
 	{% for state in states_for_today %}
 	<li class = "mainlist">
-	<a class="maincounty" href="{{ url_for('reports_for_state', state=state) }}" target="_self" style="font-size:large;">{{state}} 
+	<a class="maincounty" href="{{ url_for('reports', state=state) }}" target="_self" style="font-size:large;">{{state}} 
 	</a>
 	</li>
 	{% endfor %}		
@@ -118,7 +119,7 @@
 	{% endif %}
 	<br><br>
 	<p class=rephead>payment_error_upf</p>
-	<p2>Check for all partial payments. Payments with nothing invoiced has to be removed. The link below is a report for payments with zero invoiced purchase amounts and zero invoice total.</p2>
+	<p2>Check for all partial payments or negative unpaid face. Payments with nothing invoiced has to be removed. The link below is a report for payments with zero invoiced purchase amounts and zero invoice total.</p2>
 	<hr><br>
 	<a href="https://fig.quickbase.com/db/bk2rg4v85?a=q&qid=89" target="_blank">Payments with No Invoice</a><br><br>
 	{%if payment_error_upf|length > 0%}

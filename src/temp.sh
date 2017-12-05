@@ -1,0 +1,1 @@
+java -jar ccCreator.jar  "newccpath=/root/qbpython/DailyCheck/src/CountyClassOneOff/polknew_XML.xml" "split_key=/SPLIT/" "county=polk" "block="  "lot=" "qual=" "validLine=[0-9]{1}" "cert=20[0-9]{2}" "parcel=" "lien_year=" "tax_year=" "total=" "multiline=0"

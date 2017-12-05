@@ -17,6 +17,7 @@
 		<a href = "{{ url_for('dailyCheck',state = state) }}">{{ state }}</a>
 		{% endfor %}
 		</div></li>
+    <li style="float:left;" class="drop"><a href = "{{ url_for('logout') }}">Log out</a></li>
 	<li><form method="post" action="/searchdep" class="searchid">
 	<table><tr><th>Search Deposit</th></tr>
 	<tr><td><input type="search" name ="depid" placeholder="Enter deposit id...."></td>
@@ -50,7 +51,7 @@
 	{% endif %}
 	<br>
 	<div class="tab1">
-	<button id="fordoc" onclick="shiftpdf()">See document</button>
+	<button id="fordoc" onclick="shiftpdf()">See pdf</button>
 	{% if val | length > 0 %}
 	<button id="forval" onclick="shiftval()">See line validation</button>
 	{% endif %}
@@ -115,6 +116,14 @@
 	<input type="hidden" name="depid" value="{{ depid }}">
 	<input type="submit" value ="Create Ocr Text" class=upocr> 
 	</form>
+	<font class="head">Add new Ocr</font>
+    <form method="post" action="/CreateOcrfromfile" enctype = "multipart/form-data" class="ocrclass">
+    Clockwise: <input type="checkbox" name="clock">
+    Counter Clockwise: <input type="checkbox" name="counterclock"><br>
+    <input type="hidden" name="depid" value="{{ depid }}">
+    <input type="hidden" name="dep_rec_id" value="{{ dep_rec_id }}">
+    <input type="file" name="newfile">
+    <input type="submit" value ="Create Ocr Text from new file" class=upocr></form>
 	</div>
 	</div>
 	<table class="dataframe">
